@@ -3,6 +3,7 @@ import csv
 import gzip
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Union
@@ -17,6 +18,7 @@ from llm import UnknownModelError, get_model, get_plugins
 from llm.cli import load_conversation
 from oaklib import get_adapter
 from pydantic import BaseModel
+from tqdm import tqdm
 
 from curate_gpt import ChromaDBAdapter, __version__
 from curate_gpt.agents.chat_agent import ChatAgent, ChatResponse
@@ -32,6 +34,7 @@ from curate_gpt.evaluation.splitter import stratify_collection
 from curate_gpt.extract import AnnotatedObject
 from curate_gpt.extract.basic_extractor import BasicExtractor
 from curate_gpt.store.schema_proxy import SchemaProxy
+from curate_gpt.utils.parsing import extract_unique_values_from_tsv
 from curate_gpt.utils.vectordb_operations import match_collections
 from curate_gpt.wrappers import BaseWrapper, get_wrapper
 from curate_gpt.wrappers.literature.pubmed_wrapper import PubmedWrapper
@@ -1857,6 +1860,36 @@ def pubmed_ask(query, path, model, show_references, **kwargs):
         for ref, ref_text in response.references.items():
             print(f"## {ref}")
             print(ref_text)
+
+
+@click.command(name='extract-unique')
+@click.option('--data-tsv', '-d', type=str, required=True, help="Path to the TSV data file.")
+@click.option('--header-htm', '-h', type=str, required=True, help="Path to the HTM header file.")
+@click.option('--output-dir', '-o', type=str, default='data', help="Directory to save the output file. Defaults to 'data/'.")
+@click.option('--max-unique', '-n', type=int, default=25, help="Maximum number of unique values per column to retain.")
+def extract_unique_values(data_tsv, header_htm, output_dir, max_unique):
+    """
+    Extract and display unique values from a specified TSV file based on headers defined in an HTM file.
+    This is a pretty specific util function, so if you're not sure what it does, you probably don't need it.
+    Writes the unique values to a JSON file in the specified output directory, defaulting to 'data/'.
+    """
+    unique_values = extract_unique_values_from_tsv(data_tsv_path=data_tsv, header_htm_path=header_htm, max_unique=max_unique)
+
+    # Ensure the output directory exists
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    # Construct the output file path
+    data_file_name = Path(data_tsv).stem
+    output_file_path = os.path.join(output_dir, f"{data_file_name}_uniq_values.json")
+
+    # Write the unique values to the output file in JSON format
+    with open(output_file_path, 'w', encoding='utf-8') as file:
+        json.dump(unique_values, file, indent=4)
+
+    print(f"Unique values have been written to {output_file_path}")
+
+
+main.add_command(extract_unique_values)
 
 
 if __name__ == "__main__":
