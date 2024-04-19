@@ -1881,8 +1881,8 @@ def extract_unique_values(data_tsv, header_htm, data_dict_xls, output_dir, max_u
     you probably don't need it. Writes the unique values to a JSON file in the specified output directory, defaulting to 'data/'.
     """
 
-    # Extract unique values (both valid values and all observed values)
-    unique_values = _extract_unique_values_from_tsv(data_tsv_path=data_tsv,
+    # Extract valid values and observed values for items in data dictionary
+    parsed_data_dict = _extract_unique_values_from_tsv(data_tsv_path=data_tsv,
                                                     header_htm_path=header_htm,
                                                     data_dictionary_xls=data_dict_xls,
                                                     max_unique=max_unique)
@@ -1892,11 +1892,15 @@ def extract_unique_values(data_tsv, header_htm, data_dict_xls, output_dir, max_u
 
     # Construct the output file path
     data_file_name = Path(data_tsv).stem
-    output_file_path = os.path.join(output_dir, f"{data_file_name}_uniq_values.json")
+    output_file_path = os.path.join(output_dir, f"{data_file_name}_parsed_data_dict.json")
 
     # Write the unique values to the output file in JSON format
-    with open(output_file_path, 'w', encoding='utf-8') as file:
-        json.dump(unique_values, file, indent=4)
+    # with open(output_file_path, 'w', encoding='utf-8') as file:
+    #     json.dump(parsed_data_dict, file, indent=4)
+
+    # Writing the dictionary to a JSON file
+    with open(output_file_path, 'w') as file:
+        json.dump(parsed_data_dict, file, indent=4)  # `indent=4` for pretty printing
 
     print(f"Unique values have been written to {output_file_path}")
 

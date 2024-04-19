@@ -48,7 +48,7 @@ def _extract_unique_values_from_tsv(data_tsv_path: str,
         soup = BeautifulSoup(file, 'html.parser')
         var_name = [tr.find('td').text.strip() for tr in soup.select('tbody tr') if tr.find('td')]
 
-    # Initialize a dictionary to collect unique values
+    # Initialize a dictionary to collect unique observed values
     observed_values = {this_var: set() for this_var in var_name}
 
     # Read TSV file and extract unique values with a limit
@@ -65,7 +65,7 @@ def _extract_unique_values_from_tsv(data_tsv_path: str,
             if 'observed_values' in var_data:
                 raise ValueError(f"Duplicate observed values for {var_name}")
             else:  # Add observed values to the data dictionary
-                var_data['observed_values'] = observed_values[var_name]
+                var_data['observed_values'] = list(observed_values[var_name])
 
     # Return the enhanced observed_values
     return data_dictionary
