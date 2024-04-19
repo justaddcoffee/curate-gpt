@@ -1884,10 +1884,11 @@ def extract_unique_values(data_tsv, header_htm, data_dict_xls, output_dir, max_u
     """
 
     # Extract valid values and observed values for items in data dictionary
-    parsed_data_dict = _extract_unique_values_from_tsv(data_tsv_path=data_tsv,
-                                                    header_htm_path=header_htm,
-                                                    data_dictionary_xls=data_dict_xls,
-                                                    max_unique=max_unique)
+    parsed_data_dict = _extract_unique_values_from_tsv(DAT_tsv_file=data_tsv,
+                                                       DAT_header_htm_file=header_htm,
+                                                       data_dictionary_xls=data_dict_xls,
+                                                       data_dictionary_sheet_name_for_dat_file="THORACIC_DATA", # noqa
+                                                       max_unique=max_unique)
 
     # Ensure the output directory exists
     Path(output_dir).mkdir(parents=True, exist_ok=True)
