@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Union
 
 import click
+import openpyxl
 import pandas as pd
 import yaml
 from click_default_group import DefaultGroup
@@ -34,7 +35,7 @@ from curate_gpt.evaluation.splitter import stratify_collection
 from curate_gpt.extract import AnnotatedObject
 from curate_gpt.extract.basic_extractor import BasicExtractor
 from curate_gpt.store.schema_proxy import SchemaProxy
-from curate_gpt.utils.parsing import extract_unique_values_from_tsv
+from curate_gpt.utils.parsing import _extract_unique_values_from_tsv
 from curate_gpt.utils.vectordb_operations import match_collections
 from curate_gpt.wrappers import BaseWrapper, get_wrapper
 from curate_gpt.wrappers.literature.pubmed_wrapper import PubmedWrapper
@@ -1863,17 +1864,28 @@ def pubmed_ask(query, path, model, show_references, **kwargs):
 
 
 @click.command(name='extract-unique')
-@click.option('--data-tsv', '-d', type=str, required=True, help="Path to the TSV data file.")
-@click.option('--header-htm', '-h', type=str, required=True, help="Path to the HTM header file.")
-@click.option('--output-dir', '-o', type=str, default='data', help="Directory to save the output file. Defaults to 'data/'.")
-@click.option('--max-unique', '-n', type=int, default=25, help="Maximum number of unique values per column to retain.")
-def extract_unique_values(data_tsv, header_htm, output_dir, max_unique):
+@click.option('--data-tsv', '-d', type=str, required=True,
+              help="Path to the TSV data file.")
+@click.option('--header-htm', '-h', type=str, required=True,
+              help="Path to the HTM header file.")
+@click.option('--data-dict-xls', '-x', type=str, required=True,
+              help="Path to the XLS data dictionary file.")
+@click.option('--output-dir', '-o', type=str, default='data',
+              help="Directory to save the output file. Defaults to 'data/'.")
+@click.option('--max-unique', '-m', type=int, default=25,
+              help="Maximum number of unique values per column to retain.")
+def extract_unique_values(data_tsv, header_htm, data_dict_xls, output_dir, max_unique):
     """
-    Extract and display unique values from a specified TSV file based on headers defined in an HTM file.
-    This is a pretty specific util function, so if you're not sure what it does, you probably don't need it.
-    Writes the unique values to a JSON file in the specified output directory, defaulting to 'data/'.
+    Extract and display unique values from a specified TSV file based on headers defined in an HTM file
+    and a XLS data dictionary file. This is a pretty specific util function, so if you're not sure what it does,
+    you probably don't need it. Writes the unique values to a JSON file in the specified output directory, defaulting to 'data/'.
     """
-    unique_values = extract_unique_values_from_tsv(data_tsv_path=data_tsv, header_htm_path=header_htm, max_unique=max_unique)
+
+    # Extract unique values (both valid values and all observed values)
+    unique_values = _extract_unique_values_from_tsv(data_tsv_path=data_tsv,
+                                                    header_htm_path=header_htm,
+                                                    data_dictionary_xls=data_dict_xls,
+                                                    max_unique=max_unique)
 
     # Ensure the output directory exists
     Path(output_dir).mkdir(parents=True, exist_ok=True)
