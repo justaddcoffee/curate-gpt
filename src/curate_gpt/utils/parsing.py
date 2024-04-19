@@ -59,7 +59,8 @@ def _extract_unique_values_from_tsv(data_tsv_path: str,
                 if len(observed_values[header]) < max_unique:
                     observed_values[header].add(row[header])
 
-    # loop through data_dictionary and add observed values to data dictionary alongside valid_values
+    # loop through data_dictionary and add observed values to data dictionary
+    # alongside valid_values
     for var_name, var_data in data_dictionary.items():
         if var_name in observed_values:
             if 'observed_values' in var_data:
@@ -67,6 +68,6 @@ def _extract_unique_values_from_tsv(data_tsv_path: str,
             else:  # Add observed values to the data dictionary
                 var_data['observed_values'] = list(observed_values[var_name])
 
-    # Return the enhanced observed_values
+    # Return the data dictionary
     return data_dictionary
 
