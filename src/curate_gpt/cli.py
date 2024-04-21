@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Union
 
 import click
-import openpyxl
+import openai
 import pandas as pd
 import yaml
 from click_default_group import DefaultGroup
@@ -19,9 +19,9 @@ from llm import UnknownModelError, get_model, get_plugins
 from llm.cli import load_conversation
 from oaklib import get_adapter
 from pydantic import BaseModel
-from tqdm import tqdm
 
 from curate_gpt import ChromaDBAdapter, __version__
+from curate_gpt.agents.base_agent import BaseAgent
 from curate_gpt.agents.chat_agent import ChatAgent, ChatResponse
 from curate_gpt.agents.concept_recognition_agent import AnnotationMethod, ConceptRecognitionAgent
 from curate_gpt.agents.dase_agent import DatabaseAugmentedStructuredExtraction
@@ -1863,8 +1863,6 @@ def pubmed_ask(query, path, model, show_references, **kwargs):
             print(ref_text)
 
 
-
-
 @click.command(name='extract-unique')
 @click.option('--data-tsv', '-d', type=str, required=True,
               help="Path to the TSV data file.")
@@ -1909,6 +1907,173 @@ def extract_unique_values(data_tsv, header_htm, data_dict_xls, output_dir, max_u
 
 
 main.add_command(extract_unique_values)
+
+
+@main.command()
+@model_option
+@path_option
+@collection_option
+@click.option('--parsed_data_dict', '-d', help='Path to the input JSON file with clinical variables.')
+@click.option('--output_file', '-o', help='Path to the output file to save mappings.')
+@click.option(
+    "--prefix",
+    multiple=True,
+    help="Prefix(es) for candidate IDs.",
+)
+@click.option(
+    "--identifier-field",
+    "-I",
+    help="Field to use as identifier (defaults to id).",
+)
+@click.option(
+    "--label-field",
+    "-L",
+    help="Field to use as label (defaults to label).",
+)
+def make_unos_mapping_logic(path, model, collection, prefix,
+                            identifier_field, label_field, parsed_data_dict,
+                            output_file, **kwargs):
+
+    # Load the data dictionary from JSON file
+    with open(parsed_data_dict, 'r') as file:
+        data_dict = json.load(file)
+
+    # Prepare the YAML content dictionary
+    yaml_content = []
+
+    if model is None:
+        model = "gpt-4-turbo"
+    model_obj = get_model(model)
+
+    # set up RAG
+    """Concept recognition."""
+    # db = ChromaDBAdapter(path)
+    # extractor = BasicExtractor()
+    # if model:
+    #     extractor.model_name = model
+    #
+    # cr = ConceptRecognitionAgent(knowledge_source=db, extractor=extractor)
+    # if prefix:
+    #     cr.prefixes = list(prefix)
+    # categories = list(category) if category else None
+    # if identifier_field:
+    #     cr.identifier_field = identifier_field
+    # if label_field:
+    #     cr.label_field = label_field
+
+    db = ChromaDBAdapter(path, collection=collection)
+
+    system = '''
+You are tasked with mapping clinical variables to Human Phenotype Ontology (HPO) terms 
+based on the descriptions of the variable and the observed and valid values. Below is 
+the information that I will provide about the linical variable:
+
+    "{variable_name}": {
+        "description": {description},
+        "form": {form from which data was collected},
+        "var_start_date": {start date}
+        "var_end_date": {end date}
+        "form_section": {form section},
+        "data_type": {type of data, numeric or categorical},
+        "sas_analysis_format": {name of variable in SAS analysis format},
+        "comment": "Collection ended 1/1/07 for Lung (see INIT_CREAT & END_CREAT instead) ",
+        "valid_values": {list of valid values},
+        "observed_values": {list of observed values}
+    },
+    
+Use this information to determine appropriate HPO terms and construct YAML mappings.    
+
+For example, here is a sample clinical variable from the data dictionary:
+    "MOST_RCNT_CREAT": {
+        "description": "PATIENT MOST RECENT ABSOLUTE CREATININE AT LISTING",
+        "form": "TCR",
+        "var_start_date": "1999-10-25 00:00:00",
+        "var_end_date": "2007-01-01 00:00:00",
+        "form_section": "CLINICAL INFORMATION",
+        "data_type": "NUM",
+        "sas_analysis_format": "",
+        "comment": "Collection ended 1/1/07 for Lung (see INIT_CREAT & END_CREAT instead) ",
+        "observed_values": [
+            "1.20",
+            "0.60",
+            ".",
+            "2.30",
+            "1.80",
+            "1.10",
+            "0.70"
+        ]
+    },
+
+Based on the description and observed values, provide YAML-formatted mappings as follows:
+
+Variable_name: {variable_name}
+HPO_term: HP:XXXXXXX
+HPO_label: {hpo_label}
+function: {condition function}
+
+If a variable cannot be mapped to any HPO term, return an empty YAML object.
+
+The condition function is a Python expression that will be used to assign the HPO term (or not)
+based on the variable observed in the patient. For example:
+x > 1.2
+might be used to assign an HPO term if the observed value of the variable is greater
+than 1.2. and 
+
+x == "True" or x == "Yes" or x == "1"
+might be used to assign an HPO term if the observed value of the variable is "True", 
+"Yes", or "1".
+'''
+
+    # loop through data_dict
+    for item in data_dict.items():
+
+        prompt = f'''Here is the description of the clinical variable:\n{item}\n
+        Based on the description, provide YAML-formatted mapping to HPO as follows. 
+
+        Variable_name: variable_name  
+        HPO_term: HP:XXXXXXX
+        HPO_label: HPO label
+        function: condition_function        
+
+        DO NOT EXPLAIN YOUR ANSWER. Just provide this YAML. Provide empty YAML if no
+        mapping to an HPO term is possible.
+        '''
+
+        # RAG to find most relevant HPO terms
+        kb_results = list(
+            db.search(item[1]['description'], relevance_factor=0.99, limit=5, **kwargs)
+        )
+        if prefix:  # filter for prefixes of interest
+            filtered_kb_results = []
+            for this_result in kb_results:
+                for p in prefix:
+                    if this_result[0]['original_id'].startswith(p):
+                        filtered_kb_results.append(this_result)
+            kb_results = filtered_kb_results
+
+        if len(kb_results) > 0:
+            prompt = prompt + "\nHere are some HPO terms that might be relevant\n" + "\n".join(
+                [r[0]['original_id'] + ' ' + r[0]['label'] for r in kb_results])
+
+        try:
+            resp = model_obj.prompt(system=system, prompt=prompt)
+            print(f"{prompt}\n\n\n====\n{resp}")
+        except openai.error.InvalidRequestError:
+            print(f"Error with prompt: {prompt}")
+            continue
+
+        # add to yaml_content
+        yaml_content.append(resp)
+        pass
+
+    # Write the YAML content to a file
+    with open(output_file, 'w') as yaml_file:
+        yaml.dump(yaml_content, yaml_file, sort_keys=False)
+
+    click.echo(f'Mappings have been saved to {output_file}')
+
+
+main.add_command(make_unos_mapping_logic)
 
 
 if __name__ == "__main__":
