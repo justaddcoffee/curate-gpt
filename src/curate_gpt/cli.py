@@ -19,6 +19,7 @@ from llm import UnknownModelError, get_model, get_plugins
 from llm.cli import load_conversation
 from oaklib import get_adapter
 from pydantic import BaseModel
+from bs4 import BeautifulSoup
 
 from curate_gpt import ChromaDBAdapter, __version__
 from curate_gpt.agents.base_agent import BaseAgent
@@ -2075,6 +2076,41 @@ might be used to assign an HPO term if the observed value of the variable is "Tr
 
 main.add_command(make_unos_mapping_logic)
 
+
+def parse_html_for_columns(file_path):
+    """Parse HTML file to extract column names and their types."""
+    with open(file_path, 'r', encoding='windows-1252') as file:
+        soup = BeautifulSoup(file, 'html.parser')
+
+    columns = []
+    date_columns = []  # List to keep track of columns that are dates
+    for row in soup.find_all('tr')[1:]:  # Assuming first row is headers
+        cells = row.find_all('td')
+        col_name = cells[0].text.strip()
+        col_type = cells[3].text.strip().lower()
+        if 'character' in col_type or col_type or 'mmddyy' in cells[1].text.strip().lower():
+            columns.append((col_name, 'object'))
+        else:
+            columns.append((col_name, 'float64'))
+
+    return columns, date_columns
+
+@click.command(name='parse-data')
+@click.argument('html_file', type=click.Path(exists=True))
+@click.argument('data_file', type=click.Path(exists=True))
+def parse_data(html_file, data_file):
+    """Parse the TSV data file and map the columns correctly."""
+    columns, date_columns = parse_html_for_columns(html_file)  # Unpack both returned lists
+    col_names = [col[0] for col in columns]
+    col_types = {col[0]: col[1] for col in columns if col[1] != 'datetime64'}  # Exclude datetime types from dtype dict
+
+    df = pd.read_csv(data_file, sep='\t', names=col_names, dtype=col_types, na_values='.', parse_dates=date_columns, infer_datetime_format=True)
+
+    print(df.head())  # Print the first few rows of the DataFrame for verification
+
+
+
+main.add_command(parse_data)
 
 if __name__ == "__main__":
     main()
