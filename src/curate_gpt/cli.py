@@ -2095,22 +2095,32 @@ def parse_html_for_columns(file_path):
 
     return columns, date_columns
 
-@click.command(name='parse-data')
+def load_hpo_mappings(file_path):
+    """Load and parse the Excel spreadsheet containing HPO mappings."""
+    mappings_df = pd.read_excel(file_path, dtype=str)
+    mappings_df = mappings_df[['Variable_name', 'HPO_term', 'HPO_label_checked', 'function']]
+    mappings_df.dropna(subset=['HPO_term', 'function'], inplace=True)
+    return mappings_df
+
+@click.command(name='ontologize_unos_data')
 @click.argument('html_file', type=click.Path(exists=True))
 @click.argument('data_file', type=click.Path(exists=True))
-def parse_data(html_file, data_file):
+@click.argument('mapping_file', type=click.Path(exists=True))
+def ontologize_unos_data(html_file, data_file, mapping_file):
+
     """Parse the TSV data file and map the columns correctly."""
-    columns, date_columns = parse_html_for_columns(html_file)  # Unpack both returned lists
+    columns, date_columns = parse_html_for_columns(html_file)
+    hpo_mappings = load_hpo_mappings(mapping_file)
+
     col_names = [col[0] for col in columns]
-    col_types = {col[0]: col[1] for col in columns if col[1] != 'datetime64'}  # Exclude datetime types from dtype dict
+    col_types = {col[0]: col[1] for col in columns if col[1] != 'datetime64'}
 
     df = pd.read_csv(data_file, sep='\t', names=col_names, dtype=col_types, na_values='.', parse_dates=date_columns, infer_datetime_format=True)
-
     print(df.head())  # Print the first few rows of the DataFrame for verification
+    print(hpo_mappings.head())  # Print the first few rows of the HPO mappings DataFrame for verification
 
 
-
-main.add_command(parse_data)
+main.add_command(ontologize_unos_data)
 
 if __name__ == "__main__":
     main()
