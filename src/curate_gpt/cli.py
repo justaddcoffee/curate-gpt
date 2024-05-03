@@ -2095,29 +2095,57 @@ def parse_html_for_columns(file_path):
 
     return columns, date_columns
 
-def load_hpo_mappings(file_path):
-    """Load and parse the Excel spreadsheet containing HPO mappings."""
-    mappings_df = pd.read_excel(file_path, dtype=str)
-    mappings_df = mappings_df[['Variable_name', 'HPO_term', 'HPO_label_checked', 'function']]
-    mappings_df.dropna(subset=['HPO_term', 'function'], inplace=True)
-    return mappings_df
 
 @click.command(name='ontologize_unos_data')
 @click.argument('html_file', type=click.Path(exists=True))
 @click.argument('data_file', type=click.Path(exists=True))
 @click.argument('mapping_file', type=click.Path(exists=True))
 def ontologize_unos_data(html_file, data_file, mapping_file):
-
     """Parse the TSV data file and map the columns correctly."""
     columns, date_columns = parse_html_for_columns(html_file)
-    hpo_mappings = load_hpo_mappings(mapping_file)
+    hpo_mappings = pd.read_excel(mapping_file)
+    # loop over the rows and make sure there are no cases where HPO_term is defined but function is not
+    for index, row in hpo_mappings.iterrows():
+        if pd.notna(row['HPO_term']) and pd.isna(row['function']):
+            raise ValueError(f"Function missing for HPO term {row['HPO_term']}")
 
     col_names = [col[0] for col in columns]
     col_types = {col[0]: col[1] for col in columns if col[1] != 'datetime64'}
 
-    df = pd.read_csv(data_file, sep='\t', names=col_names, dtype=col_types, na_values='.', parse_dates=date_columns, infer_datetime_format=True)
+    df = pd.read_csv(data_file, sep='\t', names=col_names, dtype=col_types,
+                     na_values='.', parse_dates=date_columns,
+                     infer_datetime_format=True)
     print(df.head())  # Print the first few rows of the DataFrame for verification
-    print(hpo_mappings.head())  # Print the first few rows of the HPO mappings DataFrame for verification
+    print(
+        hpo_mappings.head())  # Print the first few rows of the HPO mappings DataFrame for verification
+
+    patient_hpo_terms = []
+
+    # Loop through each pt_row in the dataframe
+    for index, pt_row in df.iterrows():
+        patient_terms = set()  # Set to store unique HPO terms for each patient
+
+        # Loop through each mapping
+        for _, mapping in hpo_mappings.iterrows():
+            this_variable = mapping['Variable_name']
+
+            if this_variable not in pt_row:
+                raise RuntimeError(f"Variable {this_variable} not found in data file")
+            if pd.notna(pt_row[this_variable]) and pd.notna(mapping['HPO_term']):
+                try:
+                    # Prepare the function from the mapping
+                    function = mapping['function'].replace('x', pt_row[this_variable])
+
+                    # Evaluate the function and if true, add the HPO term to the set
+                    if eval(function):
+                        patient_terms.add(mapping['HPO_term'])
+                except Exception as e:
+                    print(f"Error evaluating function for {this_variable}: {str(e)}")
+
+        patient_hpo_terms.append(patient_terms)  # Add the set of HPO terms for this patient to the list
+
+    # Now patient_hpo_terms contains a list of sets, each set contains the HPO terms for one patient
+    print(patient_hpo_terms)  # Optionally print or handle the HPO terms as needed
 
 
 main.add_command(ontologize_unos_data)
