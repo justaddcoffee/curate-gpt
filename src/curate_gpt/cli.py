@@ -20,6 +20,7 @@ from llm.cli import load_conversation
 from oaklib import get_adapter
 from pydantic import BaseModel
 from bs4 import BeautifulSoup
+from tqdm import tqdm
 
 from curate_gpt import ChromaDBAdapter, __version__
 from curate_gpt.agents.base_agent import BaseAgent
@@ -2122,7 +2123,7 @@ def ontologize_unos_data(html_file, data_file, mapping_file):
     patient_hpo_terms = []
 
     # Loop through each pt_row in the dataframe
-    for index, pt_row in df.iterrows():
+    for index, pt_row in tqdm(df.iterrows(), "Mapping pt data to HPO terms"):
         patient_terms = set()  # Set to store unique HPO terms for each patient
 
         # Loop through each mapping
@@ -2132,9 +2133,23 @@ def ontologize_unos_data(html_file, data_file, mapping_file):
             if this_variable not in pt_row:
                 raise RuntimeError(f"Variable {this_variable} not found in data file")
             if pd.notna(pt_row[this_variable]) and pd.notna(mapping['HPO_term']):
+
+                this_pt_val = pt_row[this_variable]
+                # ['CHAR(1)', 'C', 'N', 'NUM', 'CHAR(7)', 'CHAR(2)', nan, 'CHAR(15)', 'CHAR(4)']
+                if mapping['data_type'] in ['NUM', 'N']:
+                    # coerce into number
+                    this_pt_val = float(this_pt_val)
+                elif mapping['data_type'] in \
+                    ['CHAR(1)', 'C', 'CHAR(7)', 'CHAR(2)', 'CHAR(15)', 'CHAR(4)']:
+                    # surround this_pt_val with quotes
+                    if not this_pt_val.startswith("'") or not this_pt_val.startswith("\""):
+                        this_pt_val = f"'{this_pt_val}'"
+                else:
+                    raise RuntimeError(f"Not sure what to do with this mapping {mappings} with data type {mapping['data_type']}")
+
                 try:
                     # Prepare the function from the mapping
-                    function = mapping['function'].replace('x', pt_row[this_variable])
+                    function = mapping['function'].replace('x', str(this_pt_val))
 
                     # Evaluate the function and if true, add the HPO term to the set
                     if eval(function):
