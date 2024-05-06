@@ -2128,7 +2128,7 @@ def ontologize_unos_data(html_file, data_file, mapping_file, outfile, limit):
     for index, pt_row in tqdm(df.iterrows(), total=df.shape[0], desc="Mapping pt data to HPO terms"):
         patient_terms = set()  # Set to store unique HPO terms for each patient
 
-        if limit and index > limit:
+        if limit and index >= limit:
             break
         # Loop through each mapping
         for _, mapping in hpo_mappings.iterrows():
