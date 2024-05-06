@@ -2123,7 +2123,7 @@ def ontologize_unos_data(html_file, data_file, mapping_file):
     patient_hpo_terms = []
 
     # Loop through each pt_row in the dataframe
-    for index, pt_row in tqdm(df.iterrows(), "Mapping pt data to HPO terms"):
+    for index, pt_row in tqdm(df.iterrows(), total=df.shape[0], desc="Mapping pt data to HPO terms"):
         patient_terms = set()  # Set to store unique HPO terms for each patient
 
         # Loop through each mapping
@@ -2155,12 +2155,12 @@ def ontologize_unos_data(html_file, data_file, mapping_file):
                     if eval(function):
                         patient_terms.add(mapping['HPO_term'])
                 except Exception as e:
-                    print(f"Error evaluating function for {this_variable}: {str(e)}")
+                    raise RuntimeError(f"Error evaluating function for {this_variable}: {str(e)}")
 
         patient_hpo_terms.append(patient_terms)  # Add the set of HPO terms for this patient to the list
 
     # Now patient_hpo_terms contains a list of sets, each set contains the HPO terms for one patient
-    print(patient_hpo_terms)  # Optionally print or handle the HPO terms as needed
+    print(patient_hpo_terms)
 
 
 main.add_command(ontologize_unos_data)
