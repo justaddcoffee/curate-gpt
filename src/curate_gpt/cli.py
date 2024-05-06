@@ -2102,7 +2102,8 @@ def parse_html_for_columns(file_path):
 @click.argument('data_file', type=click.Path(exists=True))
 @click.argument('mapping_file', type=click.Path(exists=True))
 @click.argument('outfile', type=click.Path(exists=False))
-def ontologize_unos_data(html_file, data_file, mapping_file, outfile):
+@click.option('limit', '-l', type=click.INT)
+def ontologize_unos_data(html_file, data_file, mapping_file, outfile, limit):
     """Parse the TSV data file and map the columns correctly."""
     columns, date_columns = parse_html_for_columns(html_file)
     hpo_mappings = pd.read_excel(mapping_file)
@@ -2127,6 +2128,8 @@ def ontologize_unos_data(html_file, data_file, mapping_file, outfile):
     for index, pt_row in tqdm(df.iterrows(), total=df.shape[0], desc="Mapping pt data to HPO terms"):
         patient_terms = set()  # Set to store unique HPO terms for each patient
 
+        if limit and index > limit:
+            break
         # Loop through each mapping
         for _, mapping in hpo_mappings.iterrows():
             this_variable = mapping['Variable_name']
