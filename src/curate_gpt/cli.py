@@ -2101,7 +2101,8 @@ def parse_html_for_columns(file_path):
 @click.argument('html_file', type=click.Path(exists=True))
 @click.argument('data_file', type=click.Path(exists=True))
 @click.argument('mapping_file', type=click.Path(exists=True))
-def ontologize_unos_data(html_file, data_file, mapping_file):
+@click.argument('outfile', type=click.Path(exists=False))
+def ontologize_unos_data(html_file, data_file, mapping_file, outfile):
     """Parse the TSV data file and map the columns correctly."""
     columns, date_columns = parse_html_for_columns(html_file)
     hpo_mappings = pd.read_excel(mapping_file)
@@ -2160,7 +2161,10 @@ def ontologize_unos_data(html_file, data_file, mapping_file):
         patient_hpo_terms.append(patient_terms)  # Add the set of HPO terms for this patient to the list
 
     # Now patient_hpo_terms contains a list of sets, each set contains the HPO terms for one patient
-    print(patient_hpo_terms)
+    with open(outfile, "w") as f:
+        for index, hpo_terms in enumerate(patient_hpo_terms):
+            sorted(hpo_terms)
+            f.write(f"{index}\t{' '.join(hpo_terms)}\n")
 
 
 main.add_command(ontologize_unos_data)
