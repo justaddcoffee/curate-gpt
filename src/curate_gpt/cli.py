@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import sys
+import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
@@ -2102,8 +2103,11 @@ def parse_html_for_columns(file_path):
 @click.argument('data_file', type=click.Path(exists=True))
 @click.argument('mapping_file', type=click.Path(exists=True))
 @click.argument('outfile', type=click.Path(exists=False))
+@click.option('exclude_forms', '-x', type=click.STRING, multiple=True,
+                 default=['DDR/LDR', 'LDR', 'LDF'])
 @click.option('limit', '-l', type=click.INT)
-def ontologize_unos_data(html_file, data_file, mapping_file, outfile, limit):
+@click.option('verbose', '-v', type=click.BOOL, is_flag=True, default=False)
+def ontologize_unos_data(html_file, data_file, mapping_file, outfile, exclude_forms, limit, verbose):
     """Parse the TSV data file and map the columns correctly."""
     columns, date_columns = parse_html_for_columns(html_file)
     hpo_mappings = pd.read_excel(mapping_file)
@@ -2124,6 +2128,11 @@ def ontologize_unos_data(html_file, data_file, mapping_file, outfile, limit):
 
     patient_hpo_terms = []
 
+    # check exclude_forms options
+    for x in exclude_forms:
+        if x not in list(hpo_mappings['form']):
+            raise RuntimeError(f"excluded_forms you passed {x} not seen in unique values in forms column: {list(set(hpo_mappings['form']))}")
+
     # Loop through each pt_row in the dataframe
     for index, pt_row in tqdm(df.iterrows(), total=df.shape[0], desc="Mapping pt data to HPO terms"):
         patient_terms = set()  # Set to store unique HPO terms for each patient
@@ -2133,6 +2142,12 @@ def ontologize_unos_data(html_file, data_file, mapping_file, outfile, limit):
         # Loop through each mapping
         for _, mapping in hpo_mappings.iterrows():
             this_variable = mapping['Variable_name']
+
+            if mapping['form'] in exclude_forms:
+                warnings.warn(
+                    f"Skipping variable {this_variable} because it's in excluded_forms "
+                    f"{' '.join(exclude_forms)}") if verbose else ""
+                continue
 
             if this_variable not in pt_row:
                 raise RuntimeError(f"Variable {this_variable} not found in data file")
