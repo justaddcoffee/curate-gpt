@@ -22,6 +22,7 @@ from oaklib import get_adapter
 from pydantic import BaseModel
 from bs4 import BeautifulSoup
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from curate_gpt import ChromaDBAdapter, __version__
 from curate_gpt.agents.base_agent import BaseAgent
@@ -2107,11 +2108,10 @@ def parse_html_for_columns(file_path):
                  default=['DDR/LDR', 'LDR', 'LDF'])
 @click.option('limit', '-l', type=click.INT)
 @click.option('verbose', '-v', type=click.BOOL, is_flag=True, default=False)
-def ontologize_unos_data(html_file, data_file, mapping_file, outfile, exclude_forms, limit, verbose):
-    """Parse the TSV data file and map the columns correctly."""
+def ontologize_unos_data(html_file, data_file, mapping_file, outfile, exclude_forms,
+                         limit, verbose):
     columns, date_columns = parse_html_for_columns(html_file)
     hpo_mappings = pd.read_excel(mapping_file)
-    # loop over the rows and make sure there are no cases where HPO_term is defined but function is not
     for index, row in hpo_mappings.iterrows():
         if pd.notna(row['HPO_term']) and pd.isna(row['function']):
             raise ValueError(f"Function missing for HPO term {row['HPO_term']}")
@@ -2122,70 +2122,53 @@ def ontologize_unos_data(html_file, data_file, mapping_file, outfile, exclude_fo
     df = pd.read_csv(data_file, sep='\t', names=col_names, dtype=col_types,
                      na_values='.', parse_dates=date_columns,
                      infer_datetime_format=True)
-    print(df.head())  # Print the first few rows of the DataFrame for verification
-    print(
-        hpo_mappings.head())  # Print the first few rows of the HPO mappings DataFrame for verification
 
     patient_hpo_terms = []
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {executor.submit(process_row, row, hpo_mappings, exclude_forms,
+                                   verbose): index for index, row in
+                   tqdm(df.iterrows(), total=df.shape[0], desc="Mapping pt data to HPO terms") if
+                   limit is None or index < limit}
+        for future in as_completed(futures):
+            patient_hpo_terms.append((futures[future], future.result()))
 
-    # check exclude_forms options
-    for x in exclude_forms:
-        if x not in list(hpo_mappings['form']):
-            raise RuntimeError(f"excluded_forms you passed {x} not seen in unique values in forms column: {list(set(hpo_mappings['form']))}")
-
-    # Loop through each pt_row in the dataframe
-    for index, pt_row in tqdm(df.iterrows(), total=df.shape[0], desc="Mapping pt data to HPO terms"):
-        patient_terms = set()  # Set to store unique HPO terms for each patient
-
-        if limit and index >= limit:
-            break
-        # Loop through each mapping
-        for _, mapping in hpo_mappings.iterrows():
-            this_variable = mapping['Variable_name']
-
-            if mapping['form'] in exclude_forms:
-                warnings.warn(
-                    f"Skipping variable {this_variable} because it's in excluded_forms "
-                    f"{' '.join(exclude_forms)}") if verbose else ""
-                continue
-
-            if this_variable not in pt_row:
-                raise RuntimeError(f"Variable {this_variable} not found in data file")
-            if pd.notna(pt_row[this_variable]) and pd.notna(mapping['HPO_term']):
-
-                this_pt_val = pt_row[this_variable]
-                # ['CHAR(1)', 'C', 'N', 'NUM', 'CHAR(7)', 'CHAR(2)', nan, 'CHAR(15)', 'CHAR(4)']
-                if mapping['data_type'] in ['NUM', 'N']:
-                    # coerce into number
-                    this_pt_val = float(this_pt_val)
-                elif mapping['data_type'] in \
-                    ['CHAR(1)', 'C', 'CHAR(7)', 'CHAR(2)', 'CHAR(15)', 'CHAR(4)']:
-                    # surround this_pt_val with quotes
-                    if not this_pt_val.startswith("'") or not this_pt_val.startswith("\""):
-                        this_pt_val = f"'{this_pt_val}'"
-                else:
-                    raise RuntimeError(f"Not sure what to do with this mapping {mappings} with data type {mapping['data_type']}")
-
-                try:
-                    # Prepare the function from the mapping
-                    function = mapping['function'].replace('x', str(this_pt_val))
-
-                    # Evaluate the function and if true, add the HPO term to the set
-                    if eval(function):
-                        patient_terms.add(mapping['HPO_term'])
-                except Exception as e:
-                    raise RuntimeError(f"Error evaluating function for {this_variable}: {str(e)}")
-
-        patient_hpo_terms.append(patient_terms)  # Add the set of HPO terms for this patient to the list
-
-    # Now patient_hpo_terms contains a list of sets, each set contains the HPO terms for one patient
+    patient_hpo_terms.sort(key=lambda x: x[0])  # Sort by the original DataFrame index
     with open(outfile, "w") as f:
-        for index, hpo_terms in enumerate(patient_hpo_terms):
-            sorted(hpo_terms)
-            f.write(f"{index}\t{' '.join(hpo_terms)}\n")
-
+        for _, hpo_terms in patient_hpo_terms:
+            sorted_terms = sorted(hpo_terms)
+            f.write(f"{_}\t{' '.join(sorted_terms)}\n")
 
 main.add_command(ontologize_unos_data)
+
+
+def process_row(pt_row, hpo_mappings, exclude_forms, verbose):
+    patient_terms = set()  # Set to store unique HPO terms for each patient
+    for _, mapping in hpo_mappings.iterrows():
+        this_variable = mapping['Variable_name']
+
+        if mapping['form'] in exclude_forms:
+            warnings.warn(f"Skipping variable {this_variable} because it's in excluded_forms {' '.join(exclude_forms)}") if verbose else ""
+            continue
+
+        if this_variable not in pt_row:
+            raise RuntimeError(f"Variable {this_variable} not found in data file")
+        if pd.notna(pt_row[this_variable]) and pd.notna(mapping['HPO_term']):
+
+            this_pt_val = pt_row[this_variable]
+            if mapping['data_type'] in ['NUM', 'N']:
+                this_pt_val = float(this_pt_val)
+            elif mapping['data_type'] in ['CHAR(1)', 'C', 'CHAR(7)', 'CHAR(2)', 'CHAR(15)', 'CHAR(4)']:
+                if not this_pt_val.startswith("'") and not this_pt_val.endswith("'"):
+                    this_pt_val = f"'{this_pt_val}'"
+
+            try:
+                function = mapping['function'].replace('x', str(this_pt_val))
+                if eval(function):
+                    patient_terms.add(mapping['HPO_term'])
+            except Exception as e:
+                raise RuntimeError(f"Error evaluating function for {this_variable}: {str(e)}")
+
+    return patient_terms
 
 if __name__ == "__main__":
     main()
