@@ -22,7 +22,7 @@ def file_paths():
 
     # Define the paths to the actual fixtures
     html_file = os.path.join(fixtures_dir, 'THORACIC_DATA.htm')
-    data_file = os.path.join(fixtures_dir, '../../../data/THORACIC_DATA.DAT')
+    data_file = os.path.join(fixtures_dir, 'THORACIC_DATA_FAKE.DAT')
     mapping_file = os.path.join(fixtures_dir, 'UNOS_HPO_mappings.xlsx')
 
     # Dummy output file path
