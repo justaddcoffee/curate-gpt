@@ -2112,16 +2112,9 @@ def ontologize_unos_data(html_file, data_file, mapping_file, outfile, exclude_fo
                          limit, verbose):
     columns, date_columns = parse_html_for_columns(html_file)
     hpo_mappings = pd.read_excel(mapping_file)
-    for index, row in hpo_mappings.iterrows():
-        if pd.notna(row['HPO_term']) and pd.isna(row['function']):
-            raise ValueError(f"Function missing for HPO term {row['HPO_term']}")
 
-    col_names = [col[0] for col in columns]
-    col_types = {col[0]: col[1] for col in columns if col[1] != 'datetime64'}
-
-    df = pd.read_csv(data_file, sep='\t', names=col_names, dtype=col_types,
-                     na_values='.', parse_dates=date_columns,
-                     infer_datetime_format=True)
+    df = make_unos_pt_df(data_file=data_file, mapping_pd_df=mapping_file,
+                         columns=columns, date_columns=date_columns)
 
     patient_hpo_terms = []
     with ThreadPoolExecutor(max_workers=10) as executor:
@@ -2139,6 +2132,24 @@ def ontologize_unos_data(html_file, data_file, mapping_file, outfile, exclude_fo
             f.write(f"{_}\t{' '.join(sorted_terms)}\n")
 
 main.add_command(ontologize_unos_data)
+
+
+def make_unos_pt_df(data_file: Path,
+                    mapping_pd_df: pd.DataFrame,
+                    columns: List,
+                    date_columns: List):
+    hpo_mappings = pd.read_excel(mapping_pd_df)
+    for index, row in hpo_mappings.iterrows():
+        if pd.notna(row['HPO_term']) and pd.isna(row['function']):
+            raise ValueError(f"Function missing for HPO term {row['HPO_term']}")
+
+    col_names = [col[0] for col in columns]
+    col_types = {col[0]: col[1] for col in columns if col[1] != 'datetime64'}
+
+    df = pd.read_csv(data_file, sep='\t', names=col_names, dtype=col_types,
+                     na_values='.', parse_dates=date_columns,
+                     infer_datetime_format=True)
+    return df
 
 
 def process_row(pt_row, hpo_mappings, exclude_forms, verbose):
