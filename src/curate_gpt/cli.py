@@ -2113,32 +2113,6 @@ def ontologize_unos_data(html_file, data_file, mapping_file, outfile, exclude_fo
     columns, date_columns = parse_html_for_columns(html_file)
     hpo_mappings = pd.read_excel(mapping_file)
 
-    df = make_unos_pt_df(data_file=data_file, mapping_pd_df=mapping_file,
-                         columns=columns, date_columns=date_columns)
-
-    patient_hpo_terms = []
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {executor.submit(process_row, row, hpo_mappings, exclude_forms,
-                                   verbose): index for index, row in
-                   tqdm(df.iterrows(), total=df.shape[0], desc="Mapping pt data to HPO terms") if
-                   limit is None or index < limit}
-        for future in as_completed(futures):
-            patient_hpo_terms.append((futures[future], future.result()))
-
-    patient_hpo_terms.sort(key=lambda x: x[0])  # Sort by the original DataFrame index
-    with open(outfile, "w") as f:
-        for _, hpo_terms in patient_hpo_terms:
-            sorted_terms = sorted(hpo_terms)
-            f.write(f"{_}\t{' '.join(sorted_terms)}\n")
-
-main.add_command(ontologize_unos_data)
-
-
-def make_unos_pt_df(data_file: Path,
-                    mapping_pd_df: pd.DataFrame,
-                    columns: List,
-                    date_columns: List):
-    hpo_mappings = pd.read_excel(mapping_pd_df)
     for index, row in hpo_mappings.iterrows():
         if pd.notna(row['HPO_term']) and pd.isna(row['function']):
             raise ValueError(f"Function missing for HPO term {row['HPO_term']}")
@@ -2149,7 +2123,23 @@ def make_unos_pt_df(data_file: Path,
     df = pd.read_csv(data_file, sep='\t', names=col_names, dtype=col_types,
                      na_values='.', parse_dates=date_columns,
                      infer_datetime_format=True)
-    return df
+
+    patient_hpo_terms = []
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {executor.submit(process_row, row, hpo_mappings, exclude_forms,
+                                   verbose): index for index, row in
+                   tqdm(df.iterrows(), total=limit if limit else df.shape[0], desc="Mapping pt data to HPO terms") if
+                   limit is None or index < limit}
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Processing results"):
+            patient_hpo_terms.append((futures[future], future.result()))
+
+    patient_hpo_terms.sort(key=lambda x: x[0])  # Sort by the original DataFrame index
+    with open(outfile, "w") as f:
+        for _, hpo_terms in tqdm(patient_hpo_terms, desc="Writing HPO terms to file"):
+            # sorted_terms = sorted(hpo_terms)
+            f.write(f"{_}\t{' '.join(hpo_terms)}\n")
+
+main.add_command(ontologize_unos_data)
 
 
 def process_row(pt_row, hpo_mappings, exclude_forms, verbose):
