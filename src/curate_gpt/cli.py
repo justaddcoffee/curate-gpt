@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import warnings
+import numpy as  np
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
@@ -2138,27 +2139,31 @@ def ontologize_unos_data(html_file, data_file, mapping_file, outfile, exclude_fo
     patient_hpo_terms.sort(key=lambda x: x[0])  # Sort by the original DataFrame index
     with open(outfile, "w") as f:
         for _, hpo_terms in tqdm(patient_hpo_terms, desc="Writing HPO terms to file"):
-            # sorted_terms = sorted(hpo_terms)
-            f.write(f"{_}\t{' '.join(hpo_terms)}\n")
+            sorted_terms = sorted(hpo_terms)
+            f.write(f"{_}\t{' '.join(sorted_terms)}\n")
 
 main.add_command(ontologize_unos_data)
 
 
 def process_row(pt_row, hpo_mappings, exclude_forms, verbose):
     patient_terms = set()  # Set to store unique HPO terms for each patient
+    import math
+    local_scope = {'nan': float('nan'), 'math': math}  # Define 'nan' and 'math' in local scope
     for _, mapping in hpo_mappings.iterrows():
         this_variable = mapping['Variable_name']
 
         if mapping['form'] in exclude_forms:
-            warnings.warn(f"Skipping variable {this_variable} because it's in excluded_forms {' '.join(exclude_forms)}") if verbose else ""
+            if verbose:
+                warnings.warn(f"Skipping variable {this_variable} because it's in excluded_forms {' '.join(exclude_forms)}")
             continue
 
         if this_variable not in pt_row:
             raise RuntimeError(f"Variable {this_variable} not found in data file")
         if pd.notna(pt_row[this_variable]) and pd.notna(mapping['HPO_term']):
-
             this_pt_val = pt_row[this_variable]
             if mapping['data_type'] in ['NUM', 'N']:
+                if this_pt_val == '.':
+                    this_pt_val = float('nan')
                 this_pt_val = float(this_pt_val)
             elif mapping['data_type'] in ['CHAR(1)', 'C', 'CHAR(7)', 'CHAR(2)', 'CHAR(15)', 'CHAR(4)']:
                 if not this_pt_val.startswith("'") and not this_pt_val.endswith("'"):
@@ -2166,12 +2171,16 @@ def process_row(pt_row, hpo_mappings, exclude_forms, verbose):
 
             try:
                 function = mapping['function'].replace('x', str(this_pt_val))
-                if eval(function):
+                if eval(function, {}, local_scope):  # Pass local_scope to eval
                     patient_terms.add(mapping['HPO_term'])
             except Exception as e:
                 raise RuntimeError(f"Error evaluating function for {this_variable}: {str(e)}")
 
+    if len(patient_terms) == 0:
+        pass
+
     return patient_terms
+
 
 if __name__ == "__main__":
     main()
