@@ -2125,6 +2125,8 @@ def ontologize_unos_data(html_file, data_file, mapping_file, outfile, exclude_fo
                      infer_datetime_format=True)
 
     patient_hpo_terms = []
+    # break off processing into separate function to allow for easier testing, and
+    # parallel processing
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(process_row, row, hpo_mappings, exclude_forms,
                                    verbose): index for index, row in
