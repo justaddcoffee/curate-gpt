@@ -150,7 +150,17 @@ def test_hpo_term_outputs_are_correct(vars_process_row, file_paths):
                     # Remove spaces and split the string by commas
                     for pos_value in matches[0].split(','):
                         run_process_row(pos_value, row['Variable_name'], blank_row, vars_process_row, row['HPO_term'])
+                elif 'x <' in row['function'] or 'x >' in row['function']:
+                    # match everything to the right of the > or <
+                    for this_clause in row['function'].split("or"):
+                        pattern = re.compile(r"(>|<)")
+                        matches = pattern.split(this_clause)
+                        if matches[1] == '>':
+                            pos_value = float(matches[2]) + 1
+                        elif matches[1] == '<':
+                            pos_value = float(matches[2]) - 1
+                        else:
+                            raise ValueError(f"Weird match: {matches}")
+                        run_process_row(pos_value, row['Variable_name'], blank_row, vars_process_row, row['HPO_term'])
                 else:
-                    foo = 1
-                    bar = 2
-                    warnings.warn(f"Deal with < and > in {row['function']}")
+                    warnings.warn(f"Deal with {row['function']}")
