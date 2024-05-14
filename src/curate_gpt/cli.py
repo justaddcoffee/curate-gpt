@@ -2152,9 +2152,6 @@ def process_row(pt_row, hpo_mappings, exclude_forms, verbose):
     for _, mapping in hpo_mappings.iterrows():
         this_variable = mapping['Variable_name']
 
-        if this_variable == 'CMV_DON':
-            foo = 1
-
         if mapping['form'] in exclude_forms:
             if verbose:
                 warnings.warn(f"Skipping variable {this_variable} because it's in excluded_forms {' '.join(exclude_forms)}")
@@ -2167,7 +2164,14 @@ def process_row(pt_row, hpo_mappings, exclude_forms, verbose):
             if mapping['data_type'] in ['NUM', 'N']:
                 if this_pt_val == '.':
                     this_pt_val = float('nan')
-                this_pt_val = float(this_pt_val)
+                else:
+                    try:
+                        # see if we need to turn this into a float
+                        if '\'' not in mapping['function'] and "\"" not in mapping['function']:
+                            this_pt_val = float(this_pt_val)
+                    except ValueError:
+                        raise RuntimeError(f"Error converting {this_pt_val} to float for {this_variable}")
+
             elif mapping['data_type'] in ['CHAR(1)', 'C', 'CHAR(7)', 'CHAR(2)', 'CHAR(15)', 'CHAR(4)']:
                 stripped_val = this_pt_val.strip()
                 if (not stripped_val.startswith("'") and not stripped_val.endswith("'")) and \

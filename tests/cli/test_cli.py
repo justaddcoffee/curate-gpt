@@ -148,14 +148,16 @@ def test_hpo_term_outputs_are_correct(vars_process_row, file_paths):
                     # Regular expression to match content inside brackets
                     pattern = re.compile(r"\[([^\]]+)\]")
                     matches = pattern.findall(row['function'])
-                    # Loop through the matches and print each item
-                    for match in matches:
-                        # Remove spaces and split the string by commas
-                        for pos_value in match.split(','):
-                            brc = blank_row.copy()
-                            brc[row['Variable_name']] = pos_value
-                            # make sure row['HPO_term'] is in the hpo_terms
-                            assert row['HPO_term'] in process_row(brc, vars_process_row[
-                                'hpo_mappings'], [], True)
+                    # Remove spaces and split the string by commas
+                    for pos_value in matches[0].split(','):
+                        brc = blank_row.copy()
+                        brc[row['Variable_name']] = pos_value
+                        # make sure row['HPO_term'] is in the hpo_terms
+                        if row['HPO_term'] not in process_row(brc, vars_process_row['hpo_mappings'], [], True):
+                            foo = 1
+                            bar = 2
+                            pass
+                        assert row['HPO_term'] in process_row(brc, vars_process_row[
+                            'hpo_mappings'], [], True)
                 else:
                     warnings.warn(f"Deal with < and > in {row['function']}")
