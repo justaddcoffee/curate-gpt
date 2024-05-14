@@ -1,4 +1,5 @@
 import os
+import re
 import warnings
 from typing import List
 
@@ -115,15 +116,46 @@ def test_hpo_term_outputs_are_correct(vars_process_row, file_paths):
 
     # loop over values in
     for index, row in vars_process_row['hpo_mappings'].iterrows():
-        if pd.notnull(row['HPO_term']) and row['data_type'] == 'C':
-            # see if row['function] matches '=='
-            if '==' in row['function']:
-                for pos_value in [ors.split("==")[-1] for ors in row['function'].split("or")]:
-                    brc = blank_row.copy()
-                    brc[row['Variable_name']] = pos_value
-                    # make sure row['HPO_term'] is in the hpo_terms
-                    assert row['HPO_term'] in process_row(brc, vars_process_row['hpo_mappings'], [], True)
-            else:
-                warnings.warn("MISSING TESTS FOR THESE!")
-        else:
-            warnings.warn("MISSING TESTS FOR THESE NON-C MAPPING!")
+        if pd.notnull(row['HPO_term']):
+            if row['data_type'] in ['C', 'CHAR(1)', 'CHAR(2)']:
+                if '==' in row['function']:
+                    for pos_value in [ors.split("==")[-1] for ors in row['function'].split("or")]:
+                        brc = blank_row.copy()
+                        brc[row['Variable_name']] = pos_value
+                        # make sure row['HPO_term'] is in the hpo_terms
+                        assert row['HPO_term'] in process_row(brc, vars_process_row['hpo_mappings'], [], True)
+                elif 'x in' in row['function']:
+                    # Regular expression to match content inside brackets
+                    pattern = re.compile(r"\[([^\]]+)\]")
+                    matches = pattern.findall(row['function'])
+                    # Loop through the matches and print each item
+                    for match in matches:
+                        # Remove spaces and split the string by commas
+                        for pos_value in match.split(','):
+                            brc = blank_row.copy()
+                            brc[row['Variable_name']] = pos_value
+                            # make sure row['HPO_term'] is in the hpo_terms
+                            assert row['HPO_term'] in process_row(brc, vars_process_row[
+                                'hpo_mappings'], [], True)
+            elif row['data_type'] in ['N']:
+                if '==' in row['function']:
+                    for pos_value in [ors.split("==")[-1] for ors in row['function'].split("or")]:
+                        brc = blank_row.copy()
+                        brc[row['Variable_name']] = pos_value
+                        # make sure row['HPO_term'] is in the hpo_terms
+                        assert row['HPO_term'] in process_row(brc, vars_process_row['hpo_mappings'], [], True)
+                elif 'x in' in row['function']:
+                    # Regular expression to match content inside brackets
+                    pattern = re.compile(r"\[([^\]]+)\]")
+                    matches = pattern.findall(row['function'])
+                    # Loop through the matches and print each item
+                    for match in matches:
+                        # Remove spaces and split the string by commas
+                        for pos_value in match.split(','):
+                            brc = blank_row.copy()
+                            brc[row['Variable_name']] = pos_value
+                            # make sure row['HPO_term'] is in the hpo_terms
+                            assert row['HPO_term'] in process_row(brc, vars_process_row[
+                                'hpo_mappings'], [], True)
+                else:
+                    warnings.warn(f"Deal with < and > in {row['function']}")
