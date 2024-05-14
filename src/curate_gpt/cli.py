@@ -2152,6 +2152,9 @@ def process_row(pt_row, hpo_mappings, exclude_forms, verbose):
     for _, mapping in hpo_mappings.iterrows():
         this_variable = mapping['Variable_name']
 
+        if this_variable == 'CMV_DON':
+            foo = 1
+
         if mapping['form'] in exclude_forms:
             if verbose:
                 warnings.warn(f"Skipping variable {this_variable} because it's in excluded_forms {' '.join(exclude_forms)}")
@@ -2166,18 +2169,17 @@ def process_row(pt_row, hpo_mappings, exclude_forms, verbose):
                     this_pt_val = float('nan')
                 this_pt_val = float(this_pt_val)
             elif mapping['data_type'] in ['CHAR(1)', 'C', 'CHAR(7)', 'CHAR(2)', 'CHAR(15)', 'CHAR(4)']:
-                if not this_pt_val.startswith("'") and not this_pt_val.endswith("'"):
+                stripped_val = this_pt_val.strip()
+                if (not stripped_val.startswith("'") and not stripped_val.endswith("'")) and \
+                        (not stripped_val.startswith('"') and not stripped_val.endswith(
+                            '"')):
                     this_pt_val = f"'{this_pt_val}'"
-
             try:
                 function = mapping['function'].replace('x', str(this_pt_val))
                 if eval(function, {}, local_scope):  # Pass local_scope to eval
                     patient_terms.add(mapping['HPO_term'])
             except Exception as e:
                 raise RuntimeError(f"Error evaluating function for {this_variable}: {str(e)}")
-
-    if len(patient_terms) == 0:
-        pass
 
     return patient_terms
 

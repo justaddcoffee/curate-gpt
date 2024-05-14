@@ -1,10 +1,13 @@
 import os
+import warnings
 from typing import List
 
 import numpy as np
 import pandas as pd
 import pytest
 from click.testing import CliRunner
+from tqdm import tqdm
+
 from curate_gpt.cli import ontologize_unos_data, main, parse_html_for_columns, \
     process_row
 
@@ -101,10 +104,26 @@ def test_ontologize_output_exists(ontologize_unos_data_result, file_paths):
 
 
 def test_hpo_term_outputs_are_correct(vars_process_row, file_paths):
-    blank_row_tsv = os.path.join(os.getcwd(), '../fixtures/unos/blank_row.tsv')
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.abspath(os.path.join(script_dir, '..', '..'))
+    blank_row_tsv = os.path.join(project_root, 'tests', 'fixtures', 'unos', 'blank_row.tsv')
+
     blank_row = pd.read_csv(blank_row_tsv, sep='\t', header=None, index_col=0).squeeze()
     blank_row_hpo = process_row(blank_row, vars_process_row['hpo_mappings'], [], True)
     # assert there are no HPO terms in the blank_row_hpo
     assert len(blank_row_hpo) == 0
 
-
+    # loop over values in
+    for index, row in vars_process_row['hpo_mappings'].iterrows():
+        if pd.notnull(row['HPO_term']) and row['data_type'] == 'C':
+            # see if row['function] matches '=='
+            if '==' in row['function']:
+                for pos_value in [ors.split("==")[-1] for ors in row['function'].split("or")]:
+                    brc = blank_row.copy()
+                    brc[row['Variable_name']] = pos_value
+                    # make sure row['HPO_term'] is in the hpo_terms
+                    assert row['HPO_term'] in process_row(brc, vars_process_row['hpo_mappings'], [], True)
+            else:
+                warnings.warn("MISSING TESTS FOR THESE!")
+        else:
+            warnings.warn("MISSING TESTS FOR THESE NON-C MAPPING!")
