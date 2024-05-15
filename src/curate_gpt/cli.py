@@ -2192,7 +2192,8 @@ def process_row(pt_row, hpo_mappings, exclude_forms, verbose):
 
 @click.command(name='plot_hpo_terms')
 @click.argument('hpo_tsv', type=click.Path(exists=False))
-def plot_hpo_terms(hpo_tsv):
+@click.option('--labels_tsv', type=click.Path(exists=True), help='Path to TSV file with HPO term labels')
+def plot_hpo_terms(hpo_tsv, labels_tsv):
     df = pd.read_csv(hpo_tsv, sep='\t', header=None)
 
     # Extract the number of HPO terms per line
@@ -2219,15 +2220,25 @@ def plot_hpo_terms(hpo_tsv):
     top_10_terms = term_counts.most_common(10)
     top_terms, top_counts = zip(*top_10_terms)
 
+    # Create a dictionary for HPO term labels if labels_tsv is provided
+    term_labels = {}
+    if labels_tsv:
+        labels_df = pd.read_csv(labels_tsv, sep='\t')
+        term_labels = dict(zip(labels_df['id'], labels_df['name']))
+
+    # Replace HPO terms with their labels if available
+    top_terms_labels = [term_labels.get(term, term) for term in top_terms]
+
     # Plot the top 10 most common HPO terms as a bar plot
     plt.figure(figsize=(12, 8))
-    plt.bar(top_terms, top_counts, color='skyblue')
+    plt.bar(top_terms_labels, top_counts, color='skyblue')
     plt.title('Top 10 Most Common HPO Terms')
     plt.xlabel('HPO Terms')
     plt.ylabel('Frequency')
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
     plt.show()
+
 
 main.add_command(plot_hpo_terms)
 
