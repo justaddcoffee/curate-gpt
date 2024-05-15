@@ -7,8 +7,10 @@ import os
 import sys
 import warnings
 import numpy as  np
+import matplotlib.pyplot as plt
 from pathlib import Path
 from typing import Any, Dict, List, Union
+from collections import Counter
 
 import click
 import openai
@@ -2187,9 +2189,6 @@ def process_row(pt_row, hpo_mappings, exclude_forms, verbose):
 
     return patient_terms
 
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
 
 @click.command(name='plot_hpo_terms')
 @click.argument('hpo_tsv', type=click.Path(exists=False))
@@ -2229,40 +2228,6 @@ def plot_hpo_terms(hpo_tsv):
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
     plt.show()
-
-    sns.set(style="whitegrid")
-    colors = sns.color_palette("husl", 10)
-
-    # Plot histogram of the number of HPO terms per person with a flashier style
-    plt.figure(figsize=(14, 7))
-    sns.histplot(num_terms_per_line, bins=range(1, max(num_terms_per_line) + 1),
-                 kde=True, color=colors[0])
-    # plt.title('Histogram of Number of HPO Terms per Person', fontsize=16,
-    #           weight='bold')
-    # plt.xlabel('Number of HPO Terms', fontsize=14)
-    # plt.ylabel('Frequency', fontsize=14)
-    # plt.grid(axis='y', linestyle='--', alpha=0.7)
-    # plt.xticks(fontsize=12)
-    # plt.yticks(fontsize=12)
-    plt.show()
-
-    # Plot the 10 most frequent HPO terms
-    from collections import Counter
-
-    term_counts = Counter(all_terms)
-    most_common_terms = term_counts.most_common(10)
-    terms, counts = zip(*most_common_terms)
-
-    plt.figure(figsize=(14, 7))
-    sns.barplot(x=list(counts), y=list(terms), palette=colors)
-    plt.title('Top 10 Most Frequent HPO Terms', fontsize=16, weight='bold')
-    plt.xlabel('Frequency', fontsize=14)
-    plt.ylabel('HPO Term', fontsize=14)
-    plt.xticks(fontsize=12)
-    plt.yticks(fontsize=12)
-    plt.show()
-
-main.add_command(plot_hpo_terms)
 
 main.add_command(plot_hpo_terms)
 
