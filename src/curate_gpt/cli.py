@@ -2242,8 +2242,8 @@ def plot_hpo_terms(hpo_tsv, labels_tsv):
 main.add_command(plot_hpo_terms)
 
 
-def create_phenopacket(patient_id, hpo_terms):
-    phenotypic_features = [{"type": {"id": term}} for term in hpo_terms.split()]
+def create_phenopacket(patient_id, hpo_terms, hpo_mapping):
+    phenotypic_features = [{"type": {"id": term, "label": hpo_mapping.get(term, "Unknown")}} for term in hpo_terms.split()]
     phenopacket = {
         "id": f"Patient_{patient_id}",
         "subject": {
@@ -2253,27 +2253,38 @@ def create_phenopacket(patient_id, hpo_terms):
     }
     return phenopacket
 
-
 @click.command(name='make_unos_phenopackets')
 @click.argument('hpo_tsv', type=click.Path(exists=True))
+@click.argument('hpo_nodes_tsv', type=click.Path(exists=True))
 @click.argument('output_dir', type=click.Path(exists=True))
-def make_unos_phenopackets(hpo_tsv, output_dir):
-    # Read the content of the TSV file
+@click.option('--id_column', default='id', help='Column name for HPO ID in the nodes TSV file')
+@click.option('--name_column', default='name', help='Column name for HPO label in the nodes TSV file')
+def make_unos_phenopackets(hpo_tsv, hpo_nodes_tsv, output_dir, id_column, name_column):
+    # Read the HPO nodes TSV file to create a mapping of HPO IDs to labels
+    hpo_mapping = {}
+    with open(hpo_nodes_tsv, "r") as nodes_file:
+        reader = csv.DictReader(nodes_file, delimiter='\t')
+        for row in reader:
+            hpo_id = row[id_column]
+            label = row[name_column]
+            hpo_mapping[hpo_id] = label
+
+    # Read the content of the HPO terms TSV file
     with open(hpo_tsv, "r") as file:
         content = file.readlines()
 
     # Create phenopackets for each line
-    for i, line in enumerate(content):
+    for i, line in tqdm(enumerate(content), total=len(content), desc="Creating phenopackets"):
         hpo_terms = line.split('\t')[1].strip()
-        phenopacket = create_phenopacket(i, hpo_terms)
+        phenopacket = create_phenopacket(i, hpo_terms, hpo_mapping)
 
         # Save each phenopacket to a separate JSON file
         output_file_path = os.path.join(output_dir, f"phenopacket_{i}.json")
         with open(output_file_path, "w") as output_file:
             json.dump(phenopacket, output_file, indent=2)
 
-main.add_command(make_unos_phenopackets)
 
+main.add_command(make_unos_phenopackets)
 
 
 
