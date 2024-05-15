@@ -2239,8 +2239,42 @@ def plot_hpo_terms(hpo_tsv, labels_tsv):
     plt.tight_layout()
     plt.show()
 
-
 main.add_command(plot_hpo_terms)
+
+
+def create_phenopacket(patient_id, hpo_terms):
+    phenotypic_features = [{"type": {"id": term}} for term in hpo_terms.split()]
+    phenopacket = {
+        "id": f"Patient_{patient_id}",
+        "subject": {
+            "id": str(patient_id)
+        },
+        "phenotypicFeatures": phenotypic_features
+    }
+    return phenopacket
+
+
+@click.command(name='make_unos_phenopackets')
+@click.argument('hpo_tsv', type=click.Path(exists=True))
+@click.argument('output_dir', type=click.Path(exists=True))
+def make_unos_phenopackets(hpo_tsv, output_dir):
+    # Read the content of the TSV file
+    with open(hpo_tsv, "r") as file:
+        content = file.readlines()
+
+    # Create phenopackets for each line
+    for i, line in enumerate(content):
+        hpo_terms = line.split('\t')[1].strip()
+        phenopacket = create_phenopacket(i, hpo_terms)
+
+        # Save each phenopacket to a separate JSON file
+        output_file_path = os.path.join(output_dir, f"phenopacket_{i}.json")
+        with open(output_file_path, "w") as output_file:
+            json.dump(phenopacket, output_file, indent=2)
+
+main.add_command(make_unos_phenopackets)
+
+
 
 
 if __name__ == "__main__":
