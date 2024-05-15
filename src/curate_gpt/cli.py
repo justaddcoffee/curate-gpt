@@ -2187,6 +2187,85 @@ def process_row(pt_row, hpo_mappings, exclude_forms, verbose):
 
     return patient_terms
 
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+@click.command(name='plot_hpo_terms')
+@click.argument('hpo_tsv', type=click.Path(exists=False))
+def plot_hpo_terms(hpo_tsv):
+    df = pd.read_csv(hpo_tsv, sep='\t', header=None)
+
+    # Extract the number of HPO terms per line
+    num_terms_per_line = df.iloc[:, 1].apply(lambda x: len(str(x).split(' ')))
+
+    # Convert the series to a mutable NumPy array
+    num_terms_per_line = np.array(num_terms_per_line)
+
+    # Extract all HPO terms used
+    all_terms = [term for terms in df.iloc[:, 1] for term in str(terms).split()]
+
+    # Plot histogram of the number of HPO terms per person ID
+    plt.figure(figsize=(10, 6))
+    plt.hist(num_terms_per_line, bins=range(1, max(num_terms_per_line) + 1), edgecolor='black')
+    plt.title('Histogram of Number of HPO Terms per Person ID')
+    plt.xlabel('Number of HPO Terms')
+    plt.ylabel('Frequency')
+    plt.show()
+
+    # Count the occurrences of each HPO term
+    term_counts = Counter(all_terms)
+
+    # Get the top 10 most common terms
+    top_10_terms = term_counts.most_common(10)
+    top_terms, top_counts = zip(*top_10_terms)
+
+    # Plot the top 10 most common HPO terms as a bar plot
+    plt.figure(figsize=(12, 8))
+    plt.bar(top_terms, top_counts, color='skyblue')
+    plt.title('Top 10 Most Common HPO Terms')
+    plt.xlabel('HPO Terms')
+    plt.ylabel('Frequency')
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    plt.show()
+
+    sns.set(style="whitegrid")
+    colors = sns.color_palette("husl", 10)
+
+    # Plot histogram of the number of HPO terms per person with a flashier style
+    plt.figure(figsize=(14, 7))
+    sns.histplot(num_terms_per_line, bins=range(1, max(num_terms_per_line) + 1),
+                 kde=True, color=colors[0])
+    # plt.title('Histogram of Number of HPO Terms per Person', fontsize=16,
+    #           weight='bold')
+    # plt.xlabel('Number of HPO Terms', fontsize=14)
+    # plt.ylabel('Frequency', fontsize=14)
+    # plt.grid(axis='y', linestyle='--', alpha=0.7)
+    # plt.xticks(fontsize=12)
+    # plt.yticks(fontsize=12)
+    plt.show()
+
+    # Plot the 10 most frequent HPO terms
+    from collections import Counter
+
+    term_counts = Counter(all_terms)
+    most_common_terms = term_counts.most_common(10)
+    terms, counts = zip(*most_common_terms)
+
+    plt.figure(figsize=(14, 7))
+    sns.barplot(x=list(counts), y=list(terms), palette=colors)
+    plt.title('Top 10 Most Frequent HPO Terms', fontsize=16, weight='bold')
+    plt.xlabel('Frequency', fontsize=14)
+    plt.ylabel('HPO Term', fontsize=14)
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.show()
+
+main.add_command(plot_hpo_terms)
+
+main.add_command(plot_hpo_terms)
+
 
 if __name__ == "__main__":
     main()
