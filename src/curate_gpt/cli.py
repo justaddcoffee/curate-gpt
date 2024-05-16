@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from typing import Any, Dict, List, Union
 from collections import Counter
+from datetime import datetime
 
 import click
 import openai
@@ -2256,12 +2257,31 @@ def create_phenopacket(patient_id, hpo_terms, hpo_mapping, patient_row):
         except ValueError:
             formatted_init_date = None
 
+    # Format age to ISO-8601 duration
+    age = None
+    if 'AGE' in patient_row and patient_row['AGE'] != ".":
+        try:
+            age_years = int(patient_row['AGE'])
+            age = f"P{age_years}Y"
+        except ValueError:
+            age = None
+
+    # Format gender using ordinal values
+    gender = 0  # Default to UNKNOWN_SEX
+    if 'GENDER' in patient_row and patient_row['GENDER'] != ".":
+        gender_mapping = {
+            "M": 2,  # MALE
+            "F": 1  # FEMALE
+        }
+        gender = gender_mapping.get(patient_row['GENDER'].upper(),
+                                    0)  # Default to UNKNOWN_SEX
+
     phenopacket = {
         "id": f"Patient_{patient_id}",
         "subject": {
-            "id": str(patient_id),
-            # Additional patient data can be added here
+            "id": str(patient_id)
         },
+        "sex": gender,
         "phenotypicFeatures": phenotypic_features
     }
 
@@ -2269,6 +2289,13 @@ def create_phenopacket(patient_id, hpo_terms, hpo_mapping, patient_row):
     if formatted_init_date:
         phenopacket["timeElement"] = {
             "timestamp": formatted_init_date
+        }
+
+    # Add age to the phenopacket if it was formatted successfully
+    if age:
+        phenopacket["timeElement"] = phenopacket.get("timeElement", {})
+        phenopacket["timeElement"]["age"] = {
+            "iso8601duration": age
         }
 
     return phenopacket
