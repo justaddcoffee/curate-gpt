@@ -2242,24 +2242,47 @@ def plot_hpo_terms(hpo_tsv, labels_tsv):
 main.add_command(plot_hpo_terms)
 
 
-def create_phenopacket(patient_id, hpo_terms, hpo_mapping):
-    phenotypic_features = [{"type": {"id": term, "label": hpo_mapping.get(term, "Unknown")}} for term in hpo_terms.split()]
+def create_phenopacket(patient_id, hpo_terms, hpo_mapping, patient_row):
+    phenotypic_features = [
+        {"type": {"id": term, "label": hpo_mapping.get(term, "Unknown")}} for term in
+        hpo_terms.split()]
+
+    # Format INIT_DATE if it exists and is not empty
+    formatted_init_date = None
+    if 'INIT_DATE' in patient_row and patient_row['INIT_DATE'] != ".":
+        try:
+            formatted_init_date = datetime.strptime(patient_row['INIT_DATE'],
+                                                    '%m/%d/%Y').isoformat() + 'Z'
+        except ValueError:
+            formatted_init_date = None
+
     phenopacket = {
         "id": f"Patient_{patient_id}",
         "subject": {
-            "id": str(patient_id)
+            "id": str(patient_id),
+            # Additional patient data can be added here
         },
         "phenotypicFeatures": phenotypic_features
     }
+
+    # Add INIT_DATE to the phenopacket if it was formatted successfully
+    if formatted_init_date:
+        phenopacket["timeElement"] = {
+            "timestamp": formatted_init_date
+        }
+
     return phenopacket
+
 
 @click.command(name='make_unos_phenopackets')
 @click.argument('hpo_tsv', type=click.Path(exists=True))
 @click.argument('hpo_nodes_tsv', type=click.Path(exists=True))
 @click.argument('output_dir', type=click.Path(exists=True))
+@click.argument('patient_tsv', type=click.Path(exists=True))
+@click.argument('patient_html', type=click.Path(exists=True))
 @click.option('--id_column', default='id', help='Column name for HPO ID in the nodes TSV file')
 @click.option('--name_column', default='name', help='Column name for HPO label in the nodes TSV file')
-def make_unos_phenopackets(hpo_tsv, hpo_nodes_tsv, output_dir, id_column, name_column):
+def make_unos_phenopackets(hpo_tsv, hpo_nodes_tsv, output_dir, patient_tsv, patient_html, id_column, name_column):
     # Read the HPO nodes TSV file to create a mapping of HPO IDs to labels
     hpo_mapping = {}
     with open(hpo_nodes_tsv, "r") as nodes_file:
@@ -2273,16 +2296,24 @@ def make_unos_phenopackets(hpo_tsv, hpo_nodes_tsv, output_dir, id_column, name_c
     with open(hpo_tsv, "r") as file:
         content = file.readlines()
 
+    # Parse the patient data from the TSV and HTML files
+    # Extract variable names from HTML file
+    with open(patient_html, 'r', encoding='windows-1252') as file:
+        soup = BeautifulSoup(file, 'html.parser')
+        var_names = [tr.find('td').text.strip() for tr in soup.select('tbody tr') if tr.find('td')]
+
+    # Create a DataFrame from the patient TSV file
+    patient_data = pd.read_csv(patient_tsv, sep='\t', names=var_names)
+
     # Create phenopackets for each line
     for i, line in tqdm(enumerate(content), total=len(content), desc="Creating phenopackets"):
         hpo_terms = line.split('\t')[1].strip()
-        phenopacket = create_phenopacket(i, hpo_terms, hpo_mapping)
+        phenopacket = create_phenopacket(i, hpo_terms, hpo_mapping, patient_data.iloc[i])
 
         # Save each phenopacket to a separate JSON file
         output_file_path = os.path.join(output_dir, f"phenopacket_{i}.json")
         with open(output_file_path, "w") as output_file:
             json.dump(phenopacket, output_file, indent=2)
-
 
 main.add_command(make_unos_phenopackets)
 
