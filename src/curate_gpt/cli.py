@@ -2245,17 +2245,15 @@ main.add_command(plot_hpo_terms)
 
 def create_phenopacket(patient_id, hpo_terms, hpo_mapping, patient_row):
     phenotypic_features = [
-        {"type": {"id": term, "label": hpo_mapping.get(term, "Unknown")}} for term in
-        hpo_terms.split()]
+        {"type": {"id": term, "label": hpo_mapping.get(term, "Unknown")}} for term in hpo_terms.split()]
 
-    # Format INIT_DATE if it exists and is not empty
-    formatted_init_date = None
-    if 'INIT_DATE' in patient_row and patient_row['INIT_DATE'] != ".":
+    # Format END_DATE if it exists and is not empty
+    formatted_end_date = None
+    if 'END_DATE' in patient_row and patient_row['END_DATE'] != ".":
         try:
-            formatted_init_date = datetime.strptime(patient_row['INIT_DATE'],
-                                                    '%m/%d/%Y').isoformat() + 'Z'
+            formatted_end_date = datetime.strptime(patient_row['END_DATE'], '%m/%d/%Y').isoformat() + 'Z'
         except ValueError:
-            formatted_init_date = None
+            formatted_end_date = None
 
     # Format age to ISO-8601 duration
     age = None
@@ -2273,29 +2271,21 @@ def create_phenopacket(patient_id, hpo_terms, hpo_mapping, patient_row):
             "M": 2,  # MALE
             "F": 1  # FEMALE
         }
-        gender = gender_mapping.get(patient_row['GENDER'].upper(),
-                                    0)  # Default to UNKNOWN_SEX
+        gender = gender_mapping.get(patient_row['GENDER'].upper(), 0)  # Default to UNKNOWN_SEX
 
     phenopacket = {
         "id": f"Patient_{patient_id}",
         "subject": {
-            "id": str(patient_id)
+            "id": str(patient_id),
+            "sex": str(gender)
         },
-        "sex": gender,
         "phenotypicFeatures": phenotypic_features
     }
 
-    # Add INIT_DATE to the phenopacket if it was formatted successfully
-    if formatted_init_date:
-        phenopacket["timeElement"] = {
-            "timestamp": formatted_init_date
-        }
-
-    # Add age to the phenopacket if it was formatted successfully
-    if age:
-        phenopacket["timeElement"] = phenopacket.get("timeElement", {})
-        phenopacket["timeElement"]["age"] = {
-            "iso8601duration": age
+    # Add END_DATE to the metadata if it was formatted successfully
+    if formatted_end_date:
+        phenopacket["metaData"] = {
+            "created": formatted_end_date
         }
 
     return phenopacket
@@ -2309,7 +2299,8 @@ def create_phenopacket(patient_id, hpo_terms, hpo_mapping, patient_row):
 @click.argument('patient_html', type=click.Path(exists=True))
 @click.option('--id_column', default='id', help='Column name for HPO ID in the nodes TSV file')
 @click.option('--name_column', default='name', help='Column name for HPO label in the nodes TSV file')
-def make_unos_phenopackets(hpo_tsv, hpo_nodes_tsv, output_dir, patient_tsv, patient_html, id_column, name_column):
+@click.option('--limit', '-l', default=None, type=int, help='Limit the number of phenopackets created')
+def make_unos_phenopackets(hpo_tsv, hpo_nodes_tsv, output_dir, patient_tsv, patient_html, id_column, name_column, limit):
     # Read the HPO nodes TSV file to create a mapping of HPO IDs to labels
     hpo_mapping = {}
     with open(hpo_nodes_tsv, "r") as nodes_file:
@@ -2331,6 +2322,10 @@ def make_unos_phenopackets(hpo_tsv, hpo_nodes_tsv, output_dir, patient_tsv, pati
 
     # Create a DataFrame from the patient TSV file
     patient_data = pd.read_csv(patient_tsv, sep='\t', names=var_names)
+
+    # Apply limit if provided
+    if limit is not None:
+        content = content[:limit]
 
     # Create phenopackets for each line
     for i, line in tqdm(enumerate(content), total=len(content), desc="Creating phenopackets"):
