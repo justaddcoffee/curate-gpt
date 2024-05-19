@@ -32,7 +32,7 @@ def file_paths():
     # Define the paths to the actual fixtures
     html_file = os.path.join(fixtures_dir, 'THORACIC_DATA.htm')
     data_file = os.path.join(fixtures_dir, 'THORACIC_DATA_FAKE.DAT')
-    mapping_file = os.path.join(fixtures_dir, 'UNOS_HPO_mappings.xlsx')
+    mapping_file = os.path.join(fixtures_dir, 'UNOS-HPO_mappings_with_negation.xlsx')
 
     # Dummy output file path
     # make temporary file for output
@@ -104,15 +104,16 @@ def test_ontologize_output_exists(ontologize_unos_data_result, file_paths):
     assert os.path.exists(file_paths['outfile_path']), "Output file was not created"
 
 
-def run_process_row(pos_value, variable_name, blank_row, vars_process_row, expected_hpo_term):
+def run_process_row(pos_value, variable_name, blank_row, vars_process_row, expected_hpo_term, modifier):
     brc = blank_row.copy()
     brc[variable_name] = pos_value
-    # make sure row['HPO_term'] is in the hpo_terms
-    assert expected_hpo_term in process_row(brc, vars_process_row['hpo_mappings'], [],True)
+    # Check if the expected HPO term or its negated form is in the processed HPO terms
+    expected_hpo_term_with_modifier = f"!{expected_hpo_term}" if modifier == 'NOT' else expected_hpo_term
+    assert expected_hpo_term_with_modifier in process_row(brc, vars_process_row['hpo_mappings'], [], True)
 
 
 def test_hpo_term_outputs_are_correct(vars_process_row, file_paths):
-    # check all mapping rows, one at a time, and ensure that we get the right HPO
+    # Check all mapping rows, one at a time, and ensure that we get the right HPO
     # term when we set the pt var to any of the positive values
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.abspath(os.path.join(script_dir, '..', '..'))
@@ -120,38 +121,39 @@ def test_hpo_term_outputs_are_correct(vars_process_row, file_paths):
 
     blank_row = pd.read_csv(blank_row_tsv, sep='\t', header=None, index_col=0).squeeze()
     blank_row_hpo = process_row(blank_row, vars_process_row['hpo_mappings'], [], True)
-    # assert there are no HPO terms in the blank_row_hpo
+    # Assert there are no HPO terms in the blank_row_hpo
     assert len(blank_row_hpo) == 0
 
-    # loop over values in
+    # Loop over values in hpo_mappings
     for index, row in vars_process_row['hpo_mappings'].iterrows():
         if pd.notnull(row['HPO_term']):
+            modifier = row.get('MODIFIER', None)  # Get the MODIFIER value
             if row['data_type'] in ['C', 'CHAR(1)', 'CHAR(2)']:
                 if '==' in row['function']:
                     for pos_value in [ors.split("==")[-1] for ors in row['function'].split("or")]:
-                        run_process_row(pos_value, row['Variable_name'], blank_row, vars_process_row, row['HPO_term'])
+                        run_process_row(pos_value.strip(), row['Variable_name'], blank_row, vars_process_row, row['HPO_term'], modifier)
                 elif 'x in' in row['function']:
                     # Regular expression to match content inside brackets
                     pattern = re.compile(r"\[([^\]]+)\]")
                     matches = pattern.findall(row['function'])
-                    # Loop through the matches and print each item
+                    # Loop through the matches and process each item
                     for match in matches:
                         # Remove spaces and split the string by commas
                         for pos_value in match.split(','):
-                            run_process_row(pos_value, row['Variable_name'], blank_row,vars_process_row, row['HPO_term'])
+                            run_process_row(pos_value.strip(), row['Variable_name'], blank_row, vars_process_row, row['HPO_term'], modifier)
             elif row['data_type'] in ['N', 'NUM']:
                 if '==' in row['function']:
                     for pos_value in [ors.split("==")[-1] for ors in row['function'].split("or")]:
-                        run_process_row(pos_value, row['Variable_name'], blank_row, vars_process_row, row['HPO_term'])
+                        run_process_row(pos_value.strip(), row['Variable_name'], blank_row, vars_process_row, row['HPO_term'], modifier)
                 elif 'x in' in row['function']:
                     # Regular expression to match content inside brackets
                     pattern = re.compile(r"\[([^\]]+)\]")
                     matches = pattern.findall(row['function'])
-                    # Remove spaces and split the string by commas
+                    # Loop through the matches and process each item
                     for pos_value in matches[0].split(','):
-                        run_process_row(pos_value, row['Variable_name'], blank_row, vars_process_row, row['HPO_term'])
+                        run_process_row(pos_value.strip(), row['Variable_name'], blank_row, vars_process_row, row['HPO_term'], modifier)
                 elif 'x <' in row['function'] or 'x >' in row['function']:
-                    # match everything to the right of the > or <
+                    # Match everything to the right of the > or <
                     for this_clause in row['function'].split("or"):
                         pattern = re.compile(r"(>|<)")
                         matches = pattern.split(this_clause)
@@ -161,6 +163,6 @@ def test_hpo_term_outputs_are_correct(vars_process_row, file_paths):
                             pos_value = float(matches[2]) - 1
                         else:
                             raise ValueError(f"Weird match: {matches}")
-                        run_process_row(pos_value, row['Variable_name'], blank_row, vars_process_row, row['HPO_term'])
+                        run_process_row(pos_value, row['Variable_name'], blank_row, vars_process_row, row['HPO_term'], modifier)
                 else:
                     warnings.warn(f"Deal with {row['function']}")

@@ -2184,7 +2184,8 @@ def process_row(pt_row, hpo_mappings, exclude_forms, verbose):
             try:
                 function = mapping['function'].replace('x', str(this_pt_val))
                 if eval(function, {}, local_scope):  # Pass local_scope to eval
-                    patient_terms.add(mapping['HPO_term'])
+                    term = f"!{mapping['HPO_term']}" if mapping.get('MODIFIER') == 'NOT' else mapping['HPO_term']
+                    patient_terms.add(term)
             except Exception as e:
                 raise RuntimeError(f"Error evaluating function for {this_variable}: {str(e)}")
 
