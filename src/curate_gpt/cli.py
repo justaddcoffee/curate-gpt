@@ -2243,16 +2243,31 @@ def plot_hpo_terms(hpo_tsv, labels_tsv):
 
 main.add_command(plot_hpo_terms)
 
+import click
+import pandas as pd
+import json
+import csv
+from bs4 import BeautifulSoup
+from tqdm import tqdm
+from datetime import datetime
+
 
 def create_phenopacket(patient_id, hpo_terms, hpo_mapping, patient_row):
-    phenotypic_features = [
-        {"type": {"id": term, "label": hpo_mapping.get(term, "Unknown")}} for term in hpo_terms.split()]
+    phenotypic_features = []
+
+    for term in hpo_terms.split():
+        excluded = term.startswith('!')
+        clean_term = term[1:] if excluded else term
+        phenotypic_features.append({
+            "type": {"id": clean_term, "label": hpo_mapping.get(clean_term, "Unknown")},
+            "excluded": excluded
+        })
 
     # Format END_DATE if it exists and is not empty
     formatted_end_date = None
     if 'END_DATE' in patient_row and patient_row['END_DATE'] != ".":
         try:
-            formatted_end_date = datetime.strptime(patient_row['END_DATE'], '%m/%d/%Y').isoformat() + 'Z'
+            formatted_end_date = datetime.strptime(patient_row['END_DATE'],'%m/%d/%Y').isoformat() + 'Z'
         except ValueError:
             formatted_end_date = None
 
@@ -2272,7 +2287,8 @@ def create_phenopacket(patient_id, hpo_terms, hpo_mapping, patient_row):
             "M": 2,  # MALE
             "F": 1  # FEMALE
         }
-        gender = gender_mapping.get(patient_row['GENDER'].upper(), 0)  # Default to UNKNOWN_SEX
+        gender = gender_mapping.get(patient_row['GENDER'].upper(),
+                                    0)  # Default to UNKNOWN_SEX
 
     phenopacket = {
         "id": f"Patient_{patient_id}",
@@ -2298,10 +2314,14 @@ def create_phenopacket(patient_id, hpo_terms, hpo_mapping, patient_row):
 @click.argument('output_dir', type=click.Path(exists=True))
 @click.argument('patient_tsv', type=click.Path(exists=True))
 @click.argument('patient_html', type=click.Path(exists=True))
-@click.option('--id_column', default='id', help='Column name for HPO ID in the nodes TSV file')
-@click.option('--name_column', default='name', help='Column name for HPO label in the nodes TSV file')
-@click.option('--limit', '-l', default=None, type=int, help='Limit the number of phenopackets created')
-def make_unos_phenopackets(hpo_tsv, hpo_nodes_tsv, output_dir, patient_tsv, patient_html, id_column, name_column, limit):
+@click.option('--id_column', default='id',
+              help='Column name for HPO ID in the nodes TSV file')
+@click.option('--name_column', default='name',
+              help='Column name for HPO label in the nodes TSV file')
+@click.option('--limit', '-l', default=None, type=int,
+              help='Limit the number of phenopackets created')
+def make_unos_phenopackets(hpo_tsv, hpo_nodes_tsv, output_dir, patient_tsv,
+                           patient_html, id_column, name_column, limit):
     # Read the HPO nodes TSV file to create a mapping of HPO IDs to labels
     hpo_mapping = {}
     with open(hpo_nodes_tsv, "r") as nodes_file:
@@ -2319,7 +2339,8 @@ def make_unos_phenopackets(hpo_tsv, hpo_nodes_tsv, output_dir, patient_tsv, pati
     # Extract variable names from HTML file
     with open(patient_html, 'r', encoding='windows-1252') as file:
         soup = BeautifulSoup(file, 'html.parser')
-        var_names = [tr.find('td').text.strip() for tr in soup.select('tbody tr') if tr.find('td')]
+        var_names = [tr.find('td').text.strip() for tr in soup.select('tbody tr') if
+                     tr.find('td')]
 
     # Create a DataFrame from the patient TSV file
     patient_data = pd.read_csv(patient_tsv, sep='\t', names=var_names)
@@ -2329,9 +2350,11 @@ def make_unos_phenopackets(hpo_tsv, hpo_nodes_tsv, output_dir, patient_tsv, pati
         content = content[:limit]
 
     # Create phenopackets for each line
-    for i, line in tqdm(enumerate(content), total=len(content), desc="Creating phenopackets"):
+    for i, line in tqdm(enumerate(content), total=len(content),
+                        desc="Creating phenopackets"):
         hpo_terms = line.split('\t')[1].strip()
-        phenopacket = create_phenopacket(i, hpo_terms, hpo_mapping, patient_data.iloc[i])
+        phenopacket = create_phenopacket(i, hpo_terms, hpo_mapping,
+                                         patient_data.iloc[i])
 
         # Save each phenopacket to a separate JSON file
         output_file_path = os.path.join(output_dir, f"phenopacket_{i}.json")
