@@ -2131,7 +2131,7 @@ def ontologize_unos_data(html_file, data_file, mapping_file, outfile, exclude_fo
     patient_hpo_terms = []
     # break off processing into separate function to allow for easier testing, and
     # parallel processing
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(process_row, row, hpo_mappings, exclude_forms,
                                    verbose): index for index, row in
                    tqdm(df.iterrows(), total=limit if limit else df.shape[0], desc="Mapping pt data to HPO terms") if
@@ -2252,10 +2252,19 @@ from tqdm import tqdm
 from datetime import datetime
 
 
+import re
+from datetime import datetime
+
 def create_phenopacket(patient_id, hpo_terms, hpo_mapping, patient_row):
     phenotypic_features = []
 
+    curie_pattern = re.compile(r'^!?[A-Za-z]+:[A-Za-z0-9]+$')
+
     for term in hpo_terms.split():
+        if not curie_pattern.match(term):
+            print(f"Error: Term '{term}' does not match CURIE format.")
+            continue
+
         excluded = term.startswith('!')
         clean_term = term[1:] if excluded else term
         phenotypic_features.append({
@@ -2287,8 +2296,7 @@ def create_phenopacket(patient_id, hpo_terms, hpo_mapping, patient_row):
             "M": 2,  # MALE
             "F": 1  # FEMALE
         }
-        gender = gender_mapping.get(patient_row['GENDER'].upper(),
-                                    0)  # Default to UNKNOWN_SEX
+        gender = gender_mapping.get(patient_row['GENDER'].upper(), 0)  # Default to UNKNOWN_SEX
 
     phenopacket = {
         "id": f"Patient_{patient_id}",
@@ -2306,7 +2314,6 @@ def create_phenopacket(patient_id, hpo_terms, hpo_mapping, patient_row):
         }
 
     return phenopacket
-
 
 @click.command(name='make_unos_phenopackets')
 @click.argument('hpo_tsv', type=click.Path(exists=True))
