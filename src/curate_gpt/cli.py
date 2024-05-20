@@ -2102,7 +2102,6 @@ def parse_html_for_columns(file_path):
 
     return columns, date_columns
 
-
 @click.command(name='ontologize_unos_data')
 @click.argument('html_file', type=click.Path(exists=True))
 @click.argument('data_file', type=click.Path(exists=True))
@@ -2149,9 +2148,9 @@ main.add_command(ontologize_unos_data)
 
 
 def process_row(pt_row, hpo_mappings, exclude_forms, verbose):
-    patient_terms = set()  # Set to store unique HPO terms for each patient
+    patient_terms = set()
     import math
-    local_scope = {'nan': float('nan'), 'math': math}  # Define 'nan' and 'math' in local scope
+    local_scope = {'nan': float('nan'), 'math': math}
     for _, mapping in hpo_mappings.iterrows():
         this_variable = mapping['Variable_name']
 
@@ -2169,7 +2168,6 @@ def process_row(pt_row, hpo_mappings, exclude_forms, verbose):
                     this_pt_val = float('nan')
                 else:
                     try:
-                        # see if we need to turn this into a float
                         if '\'' not in mapping['function'] and "\"" not in mapping['function']:
                             this_pt_val = float(this_pt_val)
                     except ValueError:
@@ -2178,13 +2176,15 @@ def process_row(pt_row, hpo_mappings, exclude_forms, verbose):
             elif mapping['data_type'] in ['CHAR(1)', 'C', 'CHAR(7)', 'CHAR(2)', 'CHAR(15)', 'CHAR(4)']:
                 stripped_val = this_pt_val.strip()
                 if (not stripped_val.startswith("'") and not stripped_val.endswith("'")) and \
-                        (not stripped_val.startswith('"') and not stripped_val.endswith(
-                            '"')):
+                        (not stripped_val.startswith('"') and not stripped_val.endswith('"')):
                     this_pt_val = f"'{this_pt_val}'"
             try:
                 function = mapping['function'].replace('x', str(this_pt_val))
-                if eval(function, {}, local_scope):  # Pass local_scope to eval
-                    term = f"!{mapping['HPO_term']}" if mapping.get('MODIFIER') == 'NOT' else mapping['HPO_term']
+                if eval(function, {}, local_scope):
+                    # be sure to strip surrounding whitespace from HPO term
+                    term = f"!{mapping['HPO_term'].strip()}" if mapping.get('MODIFIER') == 'NOT' else mapping['HPO_term']
+                    # see if term starts with "! " (with a space)
+                    # and if so, remove the space
                     patient_terms.add(term)
             except Exception as e:
                 raise RuntimeError(f"Error evaluating function for {this_variable}: {str(e)}")
